@@ -19,6 +19,7 @@ struct DrawBackgroundParams
     RECT clip{};
     bool isLight = false;
     std::uint32_t backgroundColor = 0;
+    int panelAlpha = 1;
 };
 
 struct LookMode
@@ -42,6 +43,7 @@ void themeDrawBackground(const DrawBackgroundParams& params);
 void setWindowAttribute78(HWND window);
 void setWindowAttribute10(HWND window, TransparencyMode mode, std::uint32_t color);
 void setWindowAccentPolicy10(HWND window, TransparencyMode mode, std::uint32_t color);
+void applyBackdrop(HWND window, BackgroundMode mode, std::uint32_t color, int intensity);
 void updateBlur(HWND window, bool enabled);
 
 // Text with a configurable glow, matching VCL's DrawGlassText.

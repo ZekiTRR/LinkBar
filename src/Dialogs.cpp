@@ -46,6 +46,9 @@ enum ControlId : int
     ID_USE_BG = 218,
     ID_BG_EDIT = 219,
     ID_BG_BUTTON = 220,
+    ID_BG_MODE = 221,
+    ID_BG_INTENSITY = 222,
+    ID_MONITOR = 223,
 
     ID_ICON_SIZE = 230,
     ID_MARGIN_H = 231,
@@ -59,6 +62,9 @@ enum ControlId : int
     ID_TOOLTIP_SHOW = 239,
     ID_SEPARATOR_WIDTH = 240,
     ID_SEPARATOR_STYLE = 241,
+    ID_ANIMATIONS = 242,
+    ID_DISTANCE_SCALING = 243,
+    ID_DISTANCE_RADIUS = 244,
 
     ID_AUTO_HIDE = 250,
     ID_SHOW_MODE = 251,
@@ -76,6 +82,8 @@ enum ControlId : int
 };
 
 constexpr std::size_t CONTROL_SLOTS = 96;
+
+int monitorCount();
 
 // Opening a modal dialog from inside the button's SendMessage chain nests a
 // modal loop in someone else's message dispatch. Post it instead, so the
@@ -541,6 +549,7 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM wparam, LPARAM l
             {
                 SetWindowTextW(edit, toHexColor(background ? chosen : chosen & 0x00FFFFFFU,
                                                 background ? 8 : 6).c_str());
+                state->bar->setPreviewColor(background, chosen);
                 if (IsWindow(apply))
                 {
                     EnableWindow(apply, TRUE);
@@ -639,6 +648,14 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM wparam, LPARAM l
             }
         }
         return 0;
+    case WM_CLOSE:
+        // Closing the window commits the edited values, like OK.
+        if (state != nullptr)
+        {
+            state->apply();
+        }
+        DestroyWindow(window);
+        return 0;
     case WM_DESTROY:
         if (state != nullptr)
         {
@@ -696,6 +713,12 @@ void SettingsState::load()
 
     setCombo(control(ID_JUMPLIST_MODE), static_cast<int>(b.jumplistShowMode_));
     setSpin(control(ID_JUMPLIST_RECENT), b.jumplistRecentMax_);
+    setCombo(control(ID_BG_MODE), static_cast<int>(b.backgroundMode_));
+    setSpin(control(ID_BG_INTENSITY), b.backgroundIntensity_);
+    setCombo(control(ID_MONITOR), b.monitorNum_);
+    setChecked(control(ID_ANIMATIONS), b.animationsEnabled_);
+    setChecked(control(ID_DISTANCE_SCALING), b.distanceScaling_);
+    setSpin(control(ID_DISTANCE_RADIUS), b.distanceRadius_);
 
     ShowWindow(control(ID_LIGHT_STYLE), os().isSeven ? SW_SHOW : SW_HIDE);
     ShowWindow(control(ID_AERO_GLASS), os().isEightAndEightPointOne ? SW_SHOW : SW_HIDE);
@@ -748,6 +771,14 @@ void SettingsState::apply()
     b.jumplistShowMode_ = static_cast<JumplistShowMode>(comboIndex(control(ID_JUMPLIST_MODE), 0, 1));
     b.jumplistRecentMax_ = spinValue(control(ID_JUMPLIST_RECENT), DEF_JUMPLIST_RECENTMAX,
                                      JUMPLIST_RECENTMAX_MIN, JUMPLIST_RECENTMAX_MAX);
+    b.backgroundMode_ = static_cast<BackgroundMode>(comboIndex(control(ID_BG_MODE), 0, 4));
+    b.backgroundIntensity_ = spinValue(control(ID_BG_INTENSITY), DEF_BACKGROUND_INTENSITY,
+                                       BACKGROUND_INTENSITY_MIN, BACKGROUND_INTENSITY_MAX);
+    b.animationsEnabled_ = isChecked(control(ID_ANIMATIONS));
+    b.distanceScaling_ = isChecked(control(ID_DISTANCE_SCALING));
+    b.distanceRadius_ = spinValue(control(ID_DISTANCE_RADIUS), DEF_DISTANCE_RADIUS,
+                                  DISTANCE_RADIUS_MIN, DISTANCE_RADIUS_MAX);
+    b.setMonitor(comboIndex(control(ID_MONITOR), 0, monitorCount() - 1));
 
     b.setAlign(b.align_);
     b.setAutoHide(isChecked(control(ID_AUTO_HIDE)));
@@ -812,6 +843,16 @@ HWND addPage(SettingsState& state, int index, const std::wstring& caption)
     return page;
 }
 
+int monitorCount()
+{
+    int count = 0;
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR, HDC, LPRECT, LPARAM data) -> BOOL {
+        ++*reinterpret_cast<int*>(data);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&count));
+    return std::max(count, 1);
+}
+
 void buildPanelPage(SettingsState& state, HWND page)
 {
     Layout& layout = state.layout;
@@ -867,6 +908,32 @@ void buildPanelPage(SettingsState& state, HWND page)
     makeHexEdit(backgroundEdit, 8);
     state.store(ID_BG_BUTTON, layout.add(page, L"Button", L"...", WS_TABSTOP,
         box(controlX + 145, 10 + 7 * rowHeight, 32, 22), ID_BG_BUTTON));
+
+    std::vector<std::wstring> modes{
+        l10n(L"Properties.BgSolid", L"Solid"),
+        l10n(L"Properties.BgAcrylic", L"Acrylic"),
+        l10n(L"Properties.BgMica", L"Mica"),
+        l10n(L"Properties.BgBlur", L"Blur"),
+        l10n(L"Properties.BgTransparent", L"Transparent")};
+    addLabel(layout, page, l10n(L"Properties.BackgroundMode", L"Background:"),
+             box(x, 13 + 8 * rowHeight, labelWidth, 20));
+    state.store(ID_BG_MODE, addCombo(layout, page, controlX, 10 + 8 * rowHeight,
+                                     controlWidth, modes, ID_BG_MODE));
+    addLabel(layout, page, l10n(L"Properties.BackgroundIntensity", L"Intensity:"),
+             box(x, 13 + 9 * rowHeight, labelWidth, 20));
+    state.store(ID_BG_INTENSITY, addSpin(layout, page,
+        box(controlX, 10 + 9 * rowHeight, controlWidth, 22),
+        BACKGROUND_INTENSITY_MIN, BACKGROUND_INTENSITY_MAX, ID_BG_INTENSITY));
+
+    std::vector<std::wstring> monitors;
+    for (int i = 0; i < monitorCount(); ++i)
+    {
+        monitors.push_back(format(L"%d", i + 1));
+    }
+    addLabel(layout, page, l10n(L"Properties.Monitor", L"Monitor:"),
+             box(x, 13 + 10 * rowHeight, labelWidth, 20));
+    state.store(ID_MONITOR, addCombo(layout, page, controlX, 10 + 10 * rowHeight,
+                                     controlWidth, monitors, ID_MONITOR));
 }
 
 void buildItemsPage(SettingsState& state, HWND page)
@@ -925,6 +992,18 @@ void buildItemsPage(SettingsState& state, HWND page)
         controlWidth, {l10n(L"Properties.Line", L"Line"), l10n(L"Properties.Spacer", L"Spacer")},
         ID_SEPARATOR_STYLE));
     addLabel(layout, page, l10n(L"Properties.Style", L"Style:"), box(x, 13 + 9 * rowHeight, labelWidth, 20));
+
+    state.store(ID_ANIMATIONS, addCheckBox(layout, page,
+        l10n(L"Properties.Animations", L"Enable animations"),
+        box(x, 10 + 10 * rowHeight, 370, 20), ID_ANIMATIONS));
+    state.store(ID_DISTANCE_SCALING, addCheckBox(layout, page,
+        l10n(L"Properties.DistanceScaling", L"Scale icons near the cursor"),
+        box(x, 10 + 11 * rowHeight, 200, 20), ID_DISTANCE_SCALING));
+    state.store(ID_DISTANCE_RADIUS, addSpin(layout, page,
+        box(controlX, 10 + 11 * rowHeight, controlWidth, 22),
+        DISTANCE_RADIUS_MIN, DISTANCE_RADIUS_MAX, ID_DISTANCE_RADIUS));
+    addLabel(layout, page, l10n(L"Properties.DistanceRadius", L"Radius:"),
+             box(x, 13 + 11 * rowHeight, labelWidth, 20));
 }
 
 void buildAutoHidePage(SettingsState& state, HWND page)

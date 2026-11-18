@@ -190,6 +190,9 @@ BarWindow::BarWindow(const std::wstring& settingsFile)
 
     created_ = true;
     updateBlur();
+    applyBackdrop(window_, backgroundMode_,
+                  useBackgroundColor_ ? backgroundColor_ : systemBackgroundColor_,
+                  backgroundIntensity_);
     createLinkbarTasksJumplist();
     // Layered windows are not shown by UpdateLayeredWindow: the popup window is
     // created without WS_VISIBLE and has to be shown explicitly.
@@ -386,6 +389,30 @@ LRESULT BarWindow::handleMessage(UINT message, WPARAM wparam, LPARAM lparam) noe
         return 0;
     }
     case WM_TIMER:
+        if (wparam == TIMER_ANIMATE)
+        {
+            const DWORD elapsed = GetTickCount() - animationStart_;
+            const double progress = std::clamp(static_cast<double>(elapsed) /
+                                               ANIMATION_DURATION_MS, 0.0, 1.0);
+            const double eased = progress * progress * (3.0 - 2.0 * progress);
+            const auto lerp = [eased](int from, int to) {
+                return static_cast<int>(from + (to - from) * eased + 0.5);
+            };
+            RECT current{
+                lerp(animationFrom_.left, animationTo_.left),
+                lerp(animationFrom_.top, animationTo_.top),
+                lerp(animationFrom_.right, animationTo_.right),
+                lerp(animationFrom_.bottom, animationTo_.bottom)};
+            MoveWindow(window_, current.left, current.top, rectWidth(current),
+                       rectHeight(current), FALSE);
+            updateWindow(current);
+            if (progress >= 1.0)
+            {
+                KillTimer(window_, TIMER_ANIMATE);
+                animating_ = false;
+            }
+            return 0;
+        }
         if (wparam == TIMER_AUTO_SHOW)
         {
             KillTimer(window_, TIMER_AUTO_SHOW);
@@ -542,6 +569,15 @@ LRESULT BarWindow::handleMessage(UINT message, WPARAM wparam, LPARAM lparam) noe
         break; // let DefWindowProc generate WM_CONTEXTMENU
     case WM_MOUSELEAVE:
         mouseTracking_ = false;
+        if (distanceScaling_)
+        {
+            POINT farPoint{-100000, -100000};
+            if (updateDistanceScales(farPoint.x, farPoint.y))
+            {
+                recreateMainBitmap(bitmapPanel_.width(), bitmapPanel_.height());
+                updateWindow();
+            }
+        }
         setHotIndex(ITEM_NONE);
         if (autoShowMode_ == AutoShowMode::MouseHover || canAutoHide_)
         {
@@ -684,6 +720,14 @@ void BarWindow::loadSettings()
     useBackgroundColor_ = ini.readBool(INI_SECTION_MAIN, INI_USEBKGCOLOR, DEF_USEBKGCOLOR);
     useTextColor_ = ini.readBool(INI_SECTION_MAIN, INI_USETXTCOLOR, DEF_USETXTCOLOR);
     stayOnTop_ = ini.readBool(INI_SECTION_MAIN, INI_STAYONTOP, DEF_STAYONTOP);
+    animationsEnabled_ = ini.readBool(INI_SECTION_MAIN, INI_ANIMATIONS, DEF_ANIMATIONS);
+    distanceScaling_ = ini.readBool(INI_SECTION_MAIN, INI_DISTANCE_SCALING, DEF_DISTANCE_SCALING);
+    distanceRadius_ = ini.readInt(INI_SECTION_MAIN, INI_DISTANCE_RADIUS, DEF_DISTANCE_RADIUS,
+                                  DISTANCE_RADIUS_MIN, DISTANCE_RADIUS_MAX);
+    backgroundMode_ = static_cast<BackgroundMode>(ini.readInt(INI_SECTION_MAIN,
+        INI_BACKGROUND_MODE, static_cast<int>(DEF_BACKGROUND_MODE), 0, 4));
+    backgroundIntensity_ = ini.readInt(INI_SECTION_MAIN, INI_BACKGROUND_INTENSITY,
+        DEF_BACKGROUND_INTENSITY, BACKGROUND_INTENSITY_MIN, BACKGROUND_INTENSITY_MAX);
 
     gripSize_ = GRIP_SIZE;
     hotIndex_ = ITEM_NONE;
@@ -741,6 +785,11 @@ void BarWindow::saveSettings()
     ini.writeInt(INI_SECTION_MAIN, INI_SEPARATOR_WIDTH, separatorWidth_);
     ini.writeInt(INI_SECTION_MAIN, INI_SEPARATOR_STYLE, static_cast<int>(separatorStyle_));
     ini.writeBool(INI_SECTION_MAIN, INI_TOOLTIP_SHOW, tooltipShow_);
+    ini.writeBool(INI_SECTION_MAIN, INI_ANIMATIONS, animationsEnabled_);
+    ini.writeBool(INI_SECTION_MAIN, INI_DISTANCE_SCALING, distanceScaling_);
+    ini.writeInt(INI_SECTION_MAIN, INI_DISTANCE_RADIUS, distanceRadius_);
+    ini.writeInt(INI_SECTION_MAIN, INI_BACKGROUND_MODE, static_cast<int>(backgroundMode_));
+    ini.writeInt(INI_SECTION_MAIN, INI_BACKGROUND_INTENSITY, backgroundIntensity_);
     ini.flush();
 }
 
@@ -767,6 +816,39 @@ void BarWindow::updateBackgroundColor()
 {
     LookMode mode{look_, transparencyMode_};
     systemBackgroundColor_ = taskbarColor(mode);
+    if (created_)
+    {
+        applyBackdrop(window_, backgroundMode_,
+                      useBackgroundColor_ ? backgroundColor_ : systemBackgroundColor_,
+                      backgroundIntensity_);
+    }
+}
+
+void BarWindow::setMonitor(int value)
+{
+    monitorNum_ = value;
+    if (appBar_)
+    {
+        appBar_->setMonitorNum(value);
+        appBar_->appBarPosChanged();
+    }
+}
+
+void BarWindow::setPreviewColor(bool background, std::uint32_t color)
+{
+    if (background)
+    {
+        backgroundColor_ = color;
+        useBackgroundColor_ = true;
+        updateBackgroundColor();
+    }
+    else
+    {
+        textColor_ = color & 0x00FFFFFFU;
+        useTextColor_ = true;
+    }
+    refreshItems();
+    saveSettings();
 }
 
 void BarWindow::updateBlur()
@@ -953,6 +1035,18 @@ void BarWindow::drawBackground(DibBitmap& bitmap, const RECT& clip)
     params.clip = clip;
     params.isLight = isLightStyle_;
     params.backgroundColor = useBackgroundColor_ ? backgroundColor_ : systemBackgroundColor_;
+    switch (backgroundMode_)
+    {
+    case BackgroundMode::Solid:
+        params.panelAlpha = backgroundIntensity_ * 255 / 100;
+        break;
+    case BackgroundMode::Transparent:
+        params.panelAlpha = 0;
+        break;
+    default:
+        params.panelAlpha = 1;
+        break;
+    }
     themeDrawBackground(params);
 }
 
@@ -1069,7 +1163,9 @@ void BarWindow::drawItem(DibBitmap& bitmap, int index, bool selected, bool press
     }
     drawCaption(bitmap, index, forDrag);
     const int delta = pressed ? 1 : 0;
-    items_.draw(bitmap, item, rect.left + iconOffset_.x + delta, rect.top + iconOffset_.y + delta);
+    const int iconSize = std::max(1, static_cast<int>(iconSize_ * item.drawScale));
+    items_.draw(bitmap, item, rect.left + iconOffset_.x + delta,
+                rect.top + iconOffset_.y + delta, iconSize);
 }
 
 void BarWindow::drawItems(int width, int height)
@@ -1087,8 +1183,9 @@ void BarWindow::drawItems(int width, int height)
         }
         else
         {
-            items_.draw(bitmapPanel_, *item,
-                        item->rect.left + iconOffset_.x, item->rect.top + iconOffset_.y);
+            const int iconSize = std::max(1, static_cast<int>(iconSize_ * item->drawScale));
+            items_.draw(bitmapPanel_, *item, item->rect.left + iconOffset_.x,
+                        item->rect.top + iconOffset_.y, iconSize);
         }
     }
 }
@@ -1355,6 +1452,27 @@ void BarWindow::mouseDown(int x, int y)
     setPressedIndex(itemIndexAt(POINT{x, y}));
 }
 
+bool BarWindow::updateDistanceScales(int x, int y)
+{
+    bool changed = false;
+    for (std::size_t i = 0; i < items_.count(); ++i)
+    {
+        Item& item = items_.at(i);
+        const POINT center = centerPoint(item.rect);
+        const double d = distance(POINT{x, y}, center);
+        const double factor = d >= static_cast<double>(distanceRadius_)
+            ? 1.0
+            : 1.0 + (1.0 - d / static_cast<double>(distanceRadius_)) *
+                    (DEF_DISTANCE_MAX_SCALE - 1.0);
+        if (std::abs(item.drawScale - factor) > 0.01)
+        {
+            item.drawScale = factor;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 void BarWindow::mouseMove(int x, int y)
 {
     static int previousX = -2147483647;
@@ -1371,6 +1489,11 @@ void BarWindow::mouseMove(int x, int y)
     }
     if (!mouseLeftDown_)
     {
+        if (distanceScaling_ && updateDistanceScales(x, y))
+        {
+            recreateMainBitmap(bitmapPanel_.width(), bitmapPanel_.height());
+            updateWindow();
+        }
         setHotIndex(itemIndexAt(POINT{x, y}, hotIndex_));
         return;
     }
@@ -2130,6 +2253,27 @@ void BarWindow::removeBar()
     DestroyWindow(window_);
 }
 
+void BarWindow::startAnimation(bool toHidden)
+{
+    if (!animationsEnabled_)
+    {
+        return;
+    }
+    RECT from{};
+    GetWindowRect(window_, &from);
+    RECT to = toHidden ? afterAutoHideBound_ : beforeAutoHideBound_;
+    if (EqualRect(&from, &to))
+    {
+        return;
+    }
+    animationFrom_ = from;
+    animationTo_ = to;
+    animationStart_ = GetTickCount();
+    animationToHidden_ = toHidden;
+    animating_ = true;
+    SetTimer(window_, TIMER_ANIMATE, 16, nullptr);
+}
+
 void BarWindow::doAutoHide()
 {
     if (!autoHide_ || lockAutoHide_)
@@ -2155,8 +2299,15 @@ void BarWindow::doAutoHide()
         case PanelAlign::Bottom: rect.top = rect.bottom - size; break;
         }
         afterAutoHideBound_ = rect;
-        MoveWindow(window_, rect.left, rect.top, rectWidth(rect), rectHeight(rect), FALSE);
-        updateWindow(rect);
+        if (animationsEnabled_)
+        {
+            startAnimation(true);
+        }
+        else
+        {
+            MoveWindow(window_, rect.left, rect.top, rectWidth(rect), rectHeight(rect), FALSE);
+            updateWindow(rect);
+        }
     }
 }
 
@@ -2166,9 +2317,16 @@ void BarWindow::doAutoShow()
     if (autoHide_ && autoHiden_ && (!canAutoHide_ || WindowFromPoint(point) == window_))
     {
         autoHiden_ = false;
-        MoveWindow(window_, beforeAutoHideBound_.left, beforeAutoHideBound_.top,
-                   rectWidth(beforeAutoHideBound_), rectHeight(beforeAutoHideBound_), FALSE);
-        updateWindow(beforeAutoHideBound_);
+        if (animationsEnabled_)
+        {
+            startAnimation(false);
+        }
+        else
+        {
+            MoveWindow(window_, beforeAutoHideBound_.left, beforeAutoHideBound_.top,
+                       rectWidth(beforeAutoHideBound_), rectHeight(beforeAutoHideBound_), FALSE);
+            updateWindow(beforeAutoHideBound_);
+        }
     }
 }
 

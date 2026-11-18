@@ -94,6 +94,17 @@ enum class SeparatorStyle : std::uint8_t
     Space = 1,
 };
 
+// Backdrop used behind the panel. Mica/Acrylic need Windows 11; older systems
+// fall back to Blur/Solid.
+enum class BackgroundMode : std::uint8_t
+{
+    Solid = 0,
+    Acrylic = 1,
+    Mica = 2,
+    Blur = 3,
+    Transparent = 4,
+};
+
 enum class WatchAction : std::uint8_t
 {
     Added,
@@ -165,7 +176,9 @@ inline constexpr std::uintptr_t LB_HOTKEY_ID = 1;
 inline constexpr std::uint32_t TIMER_AUTO_SHOW = 15;
 inline constexpr std::uint32_t TIMER_AUTO_HIDE = 16;
 inline constexpr std::uint32_t TIMER_UPDATE = 17;
+inline constexpr std::uint32_t TIMER_ANIMATE = 18;
 inline constexpr std::uint32_t TIMER_AUTO_HIDE_DELAY = 300;
+inline constexpr int ANIMATION_DURATION_MS = 180;
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -242,6 +255,16 @@ inline constexpr TransparencyMode DEF_TRANSPARENCYMODE = TransparencyMode::Glass
 inline constexpr int DEF_CORNERGAP_WIDTH = 0;
 inline constexpr int DEF_SEPARATOR_WIDTH = 16;
 inline constexpr SeparatorStyle DEF_SEPARATOR_STYLE = SeparatorStyle::Bar;
+inline constexpr bool DEF_ANIMATIONS = true;
+inline constexpr bool DEF_DISTANCE_SCALING = false;
+inline constexpr int DEF_DISTANCE_RADIUS = 240;
+inline constexpr int DISTANCE_RADIUS_MIN = 40;
+inline constexpr int DISTANCE_RADIUS_MAX = 1200;
+inline constexpr double DEF_DISTANCE_MAX_SCALE = 1.8;
+inline constexpr BackgroundMode DEF_BACKGROUND_MODE = BackgroundMode::Blur;
+inline constexpr int DEF_BACKGROUND_INTENSITY = 80;
+inline constexpr int BACKGROUND_INTENSITY_MIN = 0;
+inline constexpr int BACKGROUND_INTENSITY_MAX = 100;
 
 // ---------------------------------------------------------------------------
 // INI sections / fields
@@ -287,6 +310,11 @@ inline constexpr std::wstring_view INI_CORNER1GAP_WIDTH = L"corner1gapwidth";
 inline constexpr std::wstring_view INI_CORNER2GAP_WIDTH = L"corner2gapwidth";
 inline constexpr std::wstring_view INI_SEPARATOR_WIDTH = L"separatorwidth";
 inline constexpr std::wstring_view INI_SEPARATOR_STYLE = L"separatorstyle";
+inline constexpr std::wstring_view INI_ANIMATIONS = L"animations";
+inline constexpr std::wstring_view INI_DISTANCE_SCALING = L"distancescaling";
+inline constexpr std::wstring_view INI_DISTANCE_RADIUS = L"distanceradius";
+inline constexpr std::wstring_view INI_BACKGROUND_MODE = L"backgroundmode";
+inline constexpr std::wstring_view INI_BACKGROUND_INTENSITY = L"backgroundintensity";
 
 // ---------------------------------------------------------------------------
 // Globals shared by the different panels of one process

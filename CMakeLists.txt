@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 
-project(Linkbar VERSION 1.7.0 LANGUAGES CXX RC)
+project(Linkbar VERSION 1.8.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -94,3 +94,4 @@ add_custom_command(TARGET linkbar POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/Locales"
         "$<TARGET_FILE_DIR:linkbar>/Locales"
 )
+

@@ -118,6 +118,10 @@ public:
     void setTransparencyMode(TransparencyMode value);
     void setUseBackgroundColor(bool value);
     void setSortAlphabetically(bool value);
+    void setMonitor(int value);
+    void setPreviewColor(bool background, std::uint32_t color);
+    bool updateDistanceScales(int x, int y);
+    void startAnimation(bool toHidden);
 
     void setDropPosition(const POINT& point);
     [[nodiscard]] DWORD proposedDropEffect() const noexcept;
@@ -220,6 +224,16 @@ public:
     SeparatorStyle separatorStyle_ = DEF_SEPARATOR_STYLE;
     int corner1GapWidth_ = 0;
     int corner2GapWidth_ = 0;
+    bool animationsEnabled_ = DEF_ANIMATIONS;
+    bool distanceScaling_ = DEF_DISTANCE_SCALING;
+    int distanceRadius_ = DEF_DISTANCE_RADIUS;
+    BackgroundMode backgroundMode_ = DEF_BACKGROUND_MODE;
+    int backgroundIntensity_ = DEF_BACKGROUND_INTENSITY;
+    bool animating_ = false;
+    bool animationToHidden_ = false;
+    DWORD animationStart_ = 0;
+    RECT animationFrom_{};
+    RECT animationTo_{};
     int monitorNum_ = 0;
     int dragMonitorNum_ = 0;
     PanelAlign dragAlign_ = DEF_EDGE;

@@ -24,6 +24,7 @@ struct Item final
     std::uint32_t hash = 0;
     bool needLoad = false;
     int loadAttempts = 0;
+    double drawScale = 1.0;
     // Per-item presentation overrides (profile section "[Items]").
     bool showText = true;
     bool hasTextColor = false;
@@ -91,7 +92,7 @@ public:
     [[nodiscard]] int getLineIndex(int itemIndex) const noexcept;
 
     void sort();
-    void draw(DibBitmap& target, const Item& item, int x, int y) const;
+    void draw(DibBitmap& target, const Item& item, int x, int y, int size = 0) const;
     void loadIcon(Item& item);
     void bitBucketUpdateIcon();
 

@@ -43,6 +43,7 @@ public:
     // Source-over composition of a premultiplied bitmap at (x, y); all four
     // channels are blended, so the destination alpha is updated as well.
     void compositeOver(const DibBitmap& source, int x, int y) noexcept;
+    void compositeOverScaled(const DibBitmap& source, int x, int y, int width, int height) noexcept;
 
     // Replaces the content with `source` scaled to width x height (nearest neighbour).
     void assignFrom(HBITMAP source, int width, int height);

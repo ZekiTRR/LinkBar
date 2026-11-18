@@ -115,7 +115,7 @@ Item::Item(Item&& other) noexcept
     : kind(other.kind), pidl(std::exchange(other.pidl, nullptr)),
       fileName(std::move(other.fileName)), caption(std::move(other.caption)),
       rect(other.rect), hash(other.hash), needLoad(other.needLoad),
-      loadAttempts(other.loadAttempts), showText(other.showText),
+      loadAttempts(other.loadAttempts), drawScale(other.drawScale), showText(other.showText),
       hasTextColor(other.hasTextColor), textColor(other.textColor),
       icon(std::move(other.icon)), shield(other.shield), bitBucket(other.bitBucket)
 {
@@ -134,6 +134,7 @@ Item& Item::operator=(Item&& other) noexcept
         hash = other.hash;
         needLoad = other.needLoad;
         loadAttempts = other.loadAttempts;
+        drawScale = other.drawScale;
         showText = other.showText;
         hasTextColor = other.hasTextColor;
         textColor = other.textColor;
@@ -508,13 +509,17 @@ void ItemList::sort()
     }
 }
 
-void ItemList::draw(DibBitmap& target, const Item& item, int x, int y) const
+void ItemList::draw(DibBitmap& target, const Item& item, int x, int y, int size) const
 {
-    target.compositeOver(item.icon, x, y);
-    if (item.shield)
+    const int targetSize = size > 0 ? size : iconSize_;
+    if (targetSize == iconSize_ || item.icon.width() == 0)
     {
-        target.compositeOver(shield_, x, y);
+        target.compositeOver(item.icon, x, y);
+        if (item.shield) target.compositeOver(shield_, x, y);
+        return;
     }
+    target.compositeOverScaled(item.icon, x, y, targetSize, targetSize);
+    if (item.shield) target.compositeOverScaled(shield_, x, y, targetSize, targetSize);
 }
 
 } // namespace lb

@@ -336,6 +336,45 @@ void setWindowAccentPolicy10(HWND window, TransparencyMode mode, std::uint32_t c
     setWindowCompositionAttribute(window, &data);
 }
 
+void applyBackdrop(HWND window, BackgroundMode mode, std::uint32_t color, int intensity)
+{
+    const int alpha = std::clamp(intensity, 0, 100) * 255 / 100;
+    const COLORREF gradient = static_cast<COLORREF>(
+        swapRedBlue((static_cast<std::uint32_t>(alpha) << 24) | (color & 0x00FFFFFFU)));
+
+    // Windows 11 system backdrop (Mica / Acrylic). Ignored on older builds.
+    if (os().tenOrAbove)
+    {
+        constexpr DWORD DWMWA_SYSTEMBACKDROP_TYPE = 38;
+        int backdrop = 1; // none
+        if (mode == BackgroundMode::Mica) backdrop = 2;
+        else if (mode == BackgroundMode::Acrylic) backdrop = 3;
+        DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+    }
+
+    loadUndocumentedFunctions();
+    if (setWindowCompositionAttribute == nullptr)
+    {
+        return;
+    }
+    int state = 0;
+    switch (mode)
+    {
+    case BackgroundMode::Solid: state = 1; break;
+    case BackgroundMode::Blur: state = 3; break;
+    case BackgroundMode::Acrylic: state = 4; break;
+    case BackgroundMode::Mica:
+    case BackgroundMode::Transparent: state = 0; break;
+    }
+    AccentPolicy policy{};
+    policy.accentState = state;
+    policy.accentFlags = 0x13;
+    policy.gradientColor = gradient;
+    policy.animationId = 0;
+    WcaData data{19, &policy, static_cast<ULONG>(sizeof(policy))};
+    setWindowCompositionAttribute(window, &data);
+}
+
 void setWindowAttribute10(HWND window, TransparencyMode mode, std::uint32_t color)
 {
     BOOL exclude = TRUE;
@@ -534,7 +573,8 @@ void themeDrawBackground(const DrawBackgroundParams& params)
     if (os().isTen)
     {
         // Alpha 1 keeps the layered window hit-testable while looking transparent.
-        bitmap->fillRect(params.clip, 0x01000000U);
+        const std::uint32_t alpha = static_cast<std::uint32_t>(std::clamp(params.panelAlpha, 0, 255));
+        bitmap->fillRect(params.clip, (alpha << 24) | (params.backgroundColor & 0x00FFFFFFU));
         return;
     }
     if (!os().vistaOrAbove || !IsThemeActive())

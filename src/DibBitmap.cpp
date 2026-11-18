@@ -290,6 +290,43 @@ void DibBitmap::compositeOver(const DibBitmap& source, int x, int y) noexcept
     }
 }
 
+void DibBitmap::compositeOverScaled(const DibBitmap& source, int x, int y, int width, int height) noexcept
+{
+    if (bits_ == nullptr || source.bits_ == nullptr || source.bpp_ != 32 || bpp_ != 32 ||
+        width <= 0 || height <= 0 || source.width() <= 0 || source.height() <= 0)
+    {
+        return;
+    }
+    GdiFlush();
+    const int left = std::max(x, 0);
+    const int top = std::max(y, 0);
+    const int right = std::min(x + width, width_);
+    const int bottom = std::min(y + height, height_);
+    const auto* from = static_cast<const std::uint32_t*>(source.bits_);
+    auto* to = static_cast<std::uint32_t*>(bits_);
+    for (int dy = top; dy < bottom; ++dy)
+    {
+        const auto sy = static_cast<std::size_t>((dy - y) * source.height()) /
+                        static_cast<std::size_t>(height);
+        std::uint32_t* targetRow = to + static_cast<std::size_t>(dy) * static_cast<std::size_t>(width_);
+        for (int dx = left; dx < right; ++dx)
+        {
+            const auto sx = static_cast<std::size_t>((dx - x) * source.width()) /
+                            static_cast<std::size_t>(width);
+            const std::uint32_t pixel = from[sy * static_cast<std::size_t>(source.width()) + sx];
+            const std::uint32_t alpha = pixel >> 24;
+            if (alpha == 255U)
+            {
+                targetRow[dx] = pixel;
+            }
+            else if (alpha != 0U)
+            {
+                targetRow[dx] = overPremultiplied(pixel, targetRow[dx]);
+            }
+        }
+    }
+}
+
 void DibBitmap::assignFrom(HBITMAP source, int width, int height)
 {
     if (source == nullptr || width <= 0 || height <= 0)
