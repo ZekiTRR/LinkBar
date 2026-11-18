@@ -2,6 +2,8 @@
 ![Windows](https://img.shields.io/badge/Windows-10%2F11-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
 
+**Русский** | [English](README.en.md)
+
 # Linkbar
 
 Linkbar — быстрая и лёгкая панель быстрого доступа для рабочего стола Windows.
