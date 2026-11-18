@@ -69,7 +69,7 @@ __recovery/
 *.lbr
 
 # C++ build output
-cpp/build/
+build/
 .vs/
 CMakeUserPresets.json
 
