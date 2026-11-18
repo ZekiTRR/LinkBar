@@ -115,7 +115,8 @@ Item::Item(Item&& other) noexcept
     : kind(other.kind), pidl(std::exchange(other.pidl, nullptr)),
       fileName(std::move(other.fileName)), caption(std::move(other.caption)),
       rect(other.rect), hash(other.hash), needLoad(other.needLoad),
-      loadAttempts(other.loadAttempts), drawScale(other.drawScale), showText(other.showText),
+      loadAttempts(other.loadAttempts), drawScale(other.drawScale),
+      targetScale(other.targetScale), showText(other.showText),
       hasTextColor(other.hasTextColor), textColor(other.textColor),
       icon(std::move(other.icon)), shield(other.shield), bitBucket(other.bitBucket)
 {
@@ -135,6 +136,7 @@ Item& Item::operator=(Item&& other) noexcept
         needLoad = other.needLoad;
         loadAttempts = other.loadAttempts;
         drawScale = other.drawScale;
+        targetScale = other.targetScale;
         showText = other.showText;
         hasTextColor = other.hasTextColor;
         textColor = other.textColor;
@@ -309,12 +311,14 @@ void ItemList::saveListFile(const std::wstring& workDir) const
     writeLines(workDir + std::wstring(LINKSLIST_FILE_NAME), lines);
 }
 
-void ItemList::setIconSize(int size)
+void ItemList::setIconSize(int size, int multiplier)
 {
-    if (iconSize_ != size || shield_.handle() == nullptr)
+    multiplier = std::clamp(multiplier, 1, 4);
+    if (iconSize_ != size || loadMultiplier_ != multiplier || shield_.handle() == nullptr)
     {
         iconSize_ = size;
-        shield_ = shieldOverlay(size);
+        loadMultiplier_ = multiplier;
+        shield_ = shieldOverlay(size * multiplier);
     }
     for (const auto& item : items_)
     {
@@ -324,7 +328,7 @@ void ItemList::setIconSize(int size)
 
 void ItemList::loadIcon(Item& item)
 {
-    item.loadIcon(iconSize_);
+    item.loadIcon(iconSize_ * loadMultiplier_);
 }
 
 void ItemList::bitBucketUpdateIcon()
@@ -512,7 +516,11 @@ void ItemList::sort()
 void ItemList::draw(DibBitmap& target, const Item& item, int x, int y, int size) const
 {
     const int targetSize = size > 0 ? size : iconSize_;
-    if (targetSize == iconSize_ || item.icon.width() == 0)
+    if (item.icon.width() == 0)
+    {
+        return;
+    }
+    if (targetSize == item.icon.width())
     {
         target.compositeOver(item.icon, x, y);
         if (item.shield) target.compositeOver(shield_, x, y);

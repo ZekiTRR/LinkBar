@@ -394,6 +394,11 @@ LRESULT BarWindow::handleMessage(UINT message, WPARAM wparam, LPARAM lparam) noe
         return 0;
     }
     case WM_TIMER:
+        if (wparam == TIMER_SCALE)
+        {
+            animateScales();
+            return 0;
+        }
         if (wparam == TIMER_IMAGE_FRAME)
         {
             KillTimer(window_, TIMER_IMAGE_FRAME);
@@ -589,11 +594,14 @@ LRESULT BarWindow::handleMessage(UINT message, WPARAM wparam, LPARAM lparam) noe
         mouseTracking_ = false;
         if (distanceScaling_)
         {
-            POINT farPoint{-100000, -100000};
-            if (updateDistanceScales(farPoint.x, farPoint.y))
+            for (std::size_t i = 0; i < items_.count(); ++i)
             {
-                recreateMainBitmap(bitmapPanel_.width(), bitmapPanel_.height());
-                updateWindow();
+                items_.at(i).targetScale = 1.0;
+            }
+            if (!scaleAnimating_)
+            {
+                scaleAnimating_ = true;
+                SetTimer(window_, TIMER_SCALE, 16, nullptr);
             }
         }
         setHotIndex(ITEM_NONE);
@@ -831,7 +839,12 @@ void BarWindow::saveLinks()
 void BarWindow::loadItems()
 {
     workDirPidl_ = parseWorkDir(workDir_);
+    items_.setIconSize(iconSize_, distanceScaling_ ? DISTANCE_ICON_MULTIPLIER : 1);
     items_.loadFromListFile(workDir_, iconSize_, sortAlphabetically_);
+    if (distanceScaling_)
+    {
+        items_.setIconSize(iconSize_, DISTANCE_ICON_MULTIPLIER);
+    }
     loadItemSettings();
     if (!dirWatchActive_)
     {
@@ -968,16 +981,20 @@ void BarWindow::updateItemSizes()
         SelectObject(dc, previous);
         ReleaseDC(window_, dc);
     }
+    // Reserve space for the largest magnified icon so it is never clipped.
+    const int layoutIcon = distanceScaling_ ? static_cast<int>(std::ceil(iconSize_ * DEF_DISTANCE_MAX_SCALE)) : iconSize_;
+    const int extra = (layoutIcon - iconSize_) / 2;
     int w = 0;
     int h = 0;
     switch (textLayout_)
     {
     case TextLayout::Left:
     case TextLayout::Right:
-        w = itemMargin_.cx + iconSize_ + textOffset_ + textWidth_ + itemMargin_.cx;
-        h = itemMargin_.cy + std::max(iconSize_, textHeight) + itemMargin_.cy;
-        iconOffset_.x = textLayout_ == TextLayout::Right ? itemMargin_.cx
-                                                         : itemMargin_.cx + textWidth_ + textOffset_;
+        w = itemMargin_.cx + layoutIcon + textOffset_ + textWidth_ + itemMargin_.cx;
+        h = itemMargin_.cy + std::max(layoutIcon, textHeight) + itemMargin_.cy;
+        iconOffset_.x = (textLayout_ == TextLayout::Right ? itemMargin_.cx
+                                                          : itemMargin_.cx + textWidth_ + textOffset_)
+                        + extra;
         iconOffset_.y = (h - iconSize_) / 2;
         if (textLayout_ == TextLayout::Right)
         {
@@ -991,14 +1008,14 @@ void BarWindow::updateItemSizes()
         break;
     case TextLayout::Top:
     case TextLayout::Bottom:
-        w = itemMargin_.cx + std::max(iconSize_, textWidth_) + itemMargin_.cx;
-        h = itemMargin_.cy + iconSize_ + textOffset_ + textHeight + itemMargin_.cy;
+        w = itemMargin_.cx + std::max(layoutIcon, textWidth_) + itemMargin_.cx;
+        h = itemMargin_.cy + layoutIcon + textOffset_ + textHeight + itemMargin_.cy;
         iconOffset_.x = (w - iconSize_) / 2;
-        iconOffset_.y = textLayout_ == TextLayout::Bottom
-                        ? itemMargin_.cy : itemMargin_.cy + textHeight + textOffset_;
+        iconOffset_.y = (textLayout_ == TextLayout::Bottom
+                         ? itemMargin_.cy : itemMargin_.cy + textHeight + textOffset_) + extra;
         if (textLayout_ == TextLayout::Bottom)
         {
-            textRect_ = makeRect(textOffset_, itemMargin_.cy + iconSize_ + textOffset_,
+            textRect_ = makeRect(textOffset_, itemMargin_.cy + layoutIcon + textOffset_,
                                  w - 2 * textOffset_, textHeight);
         }
         else
@@ -1007,9 +1024,9 @@ void BarWindow::updateItemSizes()
         }
         break;
     default:
-        w = itemMargin_.cx + iconSize_ + itemMargin_.cx;
-        h = itemMargin_.cy + iconSize_ + itemMargin_.cy;
-        iconOffset_ = POINT{itemMargin_.cx, itemMargin_.cy};
+        w = itemMargin_.cx + layoutIcon + itemMargin_.cx;
+        h = itemMargin_.cy + layoutIcon + itemMargin_.cy;
+        iconOffset_ = POINT{itemMargin_.cx + extra, itemMargin_.cy + extra};
         break;
     }
     buttonSize_ = SIZE{w, h};
@@ -1218,8 +1235,9 @@ void BarWindow::drawItem(DibBitmap& bitmap, int index, bool selected, bool press
     drawCaption(bitmap, index, forDrag);
     const int delta = pressed ? 1 : 0;
     const int iconSize = std::max(1, static_cast<int>(iconSize_ * item.drawScale));
-    items_.draw(bitmap, item, rect.left + iconOffset_.x + delta,
-                rect.top + iconOffset_.y + delta, iconSize);
+    const int shift = (iconSize - iconSize_) / 2;
+    items_.draw(bitmap, item, rect.left + iconOffset_.x + delta - shift,
+                rect.top + iconOffset_.y + delta - shift, iconSize);
 }
 
 void BarWindow::drawItems(int width, int height)
@@ -1235,12 +1253,27 @@ void BarWindow::drawItems(int width, int height)
         {
             themeDrawSeparator(bitmapPanel_, align_, item->rect);
         }
-        else
+    }
+    // Enlarged icons are drawn last so they overlap their neighbours naturally.
+    std::vector<std::size_t> order;
+    order.reserve(items_.count());
+    for (std::size_t i = 0; i < items_.count(); ++i)
+    {
+        if (!items_.at(i).isSeparator())
         {
-            const int iconSize = std::max(1, static_cast<int>(iconSize_ * item->drawScale));
-            items_.draw(bitmapPanel_, *item, item->rect.left + iconOffset_.x,
-                        item->rect.top + iconOffset_.y, iconSize);
+            order.push_back(i);
         }
+    }
+    std::stable_sort(order.begin(), order.end(), [this](std::size_t a, std::size_t b) {
+        return items_.at(a).drawScale < items_.at(b).drawScale;
+    });
+    for (const std::size_t index : order)
+    {
+        const Item& item = items_.at(index);
+        const int iconSize = std::max(1, static_cast<int>(iconSize_ * item.drawScale));
+        const int shift = (iconSize - iconSize_) / 2;
+        items_.draw(bitmapPanel_, item, item.rect.left + iconOffset_.x - shift,
+                    item.rect.top + iconOffset_.y - shift, iconSize);
     }
 }
 
@@ -1512,19 +1545,52 @@ bool BarWindow::updateDistanceScales(int x, int y)
     for (std::size_t i = 0; i < items_.count(); ++i)
     {
         Item& item = items_.at(i);
+        if (item.isSeparator())
+        {
+            continue;
+        }
         const POINT center = centerPoint(item.rect);
         const double d = distance(POINT{x, y}, center);
         const double factor = d >= static_cast<double>(distanceRadius_)
             ? 1.0
             : 1.0 + (1.0 - d / static_cast<double>(distanceRadius_)) *
                     (DEF_DISTANCE_MAX_SCALE - 1.0);
-        if (std::abs(item.drawScale - factor) > 0.01)
+        if (std::abs(item.targetScale - factor) > 0.005)
         {
-            item.drawScale = factor;
+            item.targetScale = factor;
             changed = true;
         }
     }
+    if (changed && !scaleAnimating_)
+    {
+        scaleAnimating_ = true;
+        SetTimer(window_, TIMER_SCALE, 16, nullptr);
+    }
     return changed;
+}
+
+void BarWindow::animateScales()
+{
+    bool active = false;
+    for (std::size_t i = 0; i < items_.count(); ++i)
+    {
+        Item& item = items_.at(i);
+        const double delta = item.targetScale - item.drawScale;
+        if (std::abs(delta) < 0.002)
+        {
+            item.drawScale = item.targetScale;
+            continue;
+        }
+        item.drawScale += delta * SCALE_EASE;
+        active = true;
+    }
+    recreateMainBitmap(bitmapPanel_.width(), bitmapPanel_.height());
+    updateWindow();
+    if (!active)
+    {
+        scaleAnimating_ = false;
+        KillTimer(window_, TIMER_SCALE);
+    }
 }
 
 void BarWindow::mouseMove(int x, int y)
@@ -1543,10 +1609,9 @@ void BarWindow::mouseMove(int x, int y)
     }
     if (!mouseLeftDown_)
     {
-        if (distanceScaling_ && updateDistanceScales(x, y))
+        if (distanceScaling_)
         {
-            recreateMainBitmap(bitmapPanel_.width(), bitmapPanel_.height());
-            updateWindow();
+            updateDistanceScales(x, y);
         }
         setHotIndex(itemIndexAt(POINT{x, y}, hotIndex_));
         return;
@@ -2475,7 +2540,7 @@ void BarWindow::setIconSize(int value)
         return;
     }
     iconSize_ = std::clamp(value, ICON_SIZE_MIN, ICON_SIZE_MAX);
-    items_.setIconSize(iconSize_);
+    items_.setIconSize(iconSize_, distanceScaling_ ? DISTANCE_ICON_MULTIPLIER : 1);
 }
 
 void BarWindow::setLook(Look value)
@@ -2937,4 +3002,5 @@ STDMETHODIMP BarWindow::Drop(IDataObject* dataObject, DWORD keyState,
 }
 
 } // namespace lb
+
 

@@ -25,6 +25,7 @@ struct Item final
     bool needLoad = false;
     int loadAttempts = 0;
     double drawScale = 1.0;
+    double targetScale = 1.0;
     // Per-item presentation overrides (profile section "[Items]").
     bool showText = true;
     bool hasTextColor = false;
@@ -84,8 +85,9 @@ public:
     void loadFromListFile(const std::wstring& workDir, int iconSize, bool sortAlphabetically);
     void saveListFile(const std::wstring& workDir) const;
 
-    void setIconSize(int size);
+    void setIconSize(int size, int multiplier = 1);
     [[nodiscard]] int iconSize() const noexcept { return iconSize_; }
+    [[nodiscard]] int iconLoadMultiplier() const noexcept { return loadMultiplier_; }
 
     void updateLines(bool vertical, int width, int height);
     [[nodiscard]] const std::vector<int>& lines() const noexcept { return lines_; }
@@ -105,6 +107,7 @@ private:
     std::vector<std::unique_ptr<Item>> items_;
     std::vector<int> lines_;
     int iconSize_ = 0;
+    int loadMultiplier_ = 1;
     int lineWidth_ = 0;
     DibBitmap shield_;
 };

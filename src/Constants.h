@@ -178,6 +178,7 @@ inline constexpr std::uint32_t TIMER_AUTO_HIDE = 16;
 inline constexpr std::uint32_t TIMER_UPDATE = 17;
 inline constexpr std::uint32_t TIMER_ANIMATE = 18;
 inline constexpr std::uint32_t TIMER_IMAGE_FRAME = 19;
+inline constexpr std::uint32_t TIMER_SCALE = 20;
 inline constexpr std::uint32_t TIMER_AUTO_HIDE_DELAY = 300;
 inline constexpr int ANIMATION_DURATION_MS = 180;
 
@@ -262,6 +263,8 @@ inline constexpr int DEF_DISTANCE_RADIUS = 240;
 inline constexpr int DISTANCE_RADIUS_MIN = 40;
 inline constexpr int DISTANCE_RADIUS_MAX = 1200;
 inline constexpr double DEF_DISTANCE_MAX_SCALE = 1.8;
+inline constexpr int DISTANCE_ICON_MULTIPLIER = 2;
+inline constexpr double SCALE_EASE = 0.28;
 inline constexpr BackgroundMode DEF_BACKGROUND_MODE = BackgroundMode::Blur;
 inline constexpr int DEF_BACKGROUND_INTENSITY = 80;
 inline constexpr int DEF_IMAGE_LAYOUT = 0;

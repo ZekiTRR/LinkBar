@@ -123,6 +123,7 @@ public:
     void setPreviewColor(bool background, std::uint32_t color);
     void setPreviewImage(const std::wstring& path, ImageLayout layout, int opacity);
     bool updateDistanceScales(int x, int y);
+    void animateScales();
     void startAnimation(bool toHidden);
 
     void setDropPosition(const POINT& point);
@@ -237,6 +238,7 @@ public:
     PanelImage panelImage_;
     int imageFrame_ = 0;
     bool animating_ = false;
+    bool scaleAnimating_ = false;
     bool animationToHidden_ = false;
     DWORD animationStart_ = 0;
     RECT animationFrom_{};

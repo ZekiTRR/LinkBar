@@ -28,6 +28,19 @@ std::uint32_t overPremultiplied(std::uint32_t source, std::uint32_t destination)
     return result;
 }
 
+std::uint32_t lerpPremultiplied(std::uint32_t a, std::uint32_t b, int weight) noexcept
+{
+    const auto mix = [weight](std::uint32_t from, std::uint32_t to) {
+        const int value = static_cast<int>(from) +
+                          ((static_cast<int>(to) - static_cast<int>(from)) * weight + 128) / 256;
+        return static_cast<std::uint32_t>(std::clamp(value, 0, 255));
+    };
+    return ((mix(a >> 24, b >> 24) & 0xFFU) << 24) |
+           ((mix((a >> 16) & 0xFF, (b >> 16) & 0xFF) & 0xFFU) << 16) |
+           ((mix((a >> 8) & 0xFF, (b >> 8) & 0xFF) & 0xFFU) << 8) |
+           (mix(a & 0xFF, b & 0xFF) & 0xFFU);
+}
+
 std::uint32_t premultiplyPixel(std::uint32_t pixel) noexcept
 {
     const std::uint32_t alpha = pixel >> 24;
@@ -304,16 +317,33 @@ void DibBitmap::compositeOverScaled(const DibBitmap& source, int x, int y, int w
     const int bottom = std::min(y + height, height_);
     const auto* from = static_cast<const std::uint32_t*>(source.bits_);
     auto* to = static_cast<std::uint32_t*>(bits_);
+    const int sourceWidth = source.width();
+    const int sourceHeight = source.height();
+    const auto sample = [&](int sx, int sy) -> std::uint32_t {
+        const int cx = std::clamp(sx, 0, sourceWidth - 1);
+        const int cy = std::clamp(sy, 0, sourceHeight - 1);
+        return from[static_cast<std::size_t>(cy) * static_cast<std::size_t>(sourceWidth) +
+                    static_cast<std::size_t>(cx)];
+    };
+    // Bilinear sampling in 16.16 fixed point; colors stay premultiplied.
     for (int dy = top; dy < bottom; ++dy)
     {
-        const auto sy = static_cast<std::size_t>((dy - y) * source.height()) /
-                        static_cast<std::size_t>(height);
+        const long long fy = ((static_cast<long long>(dy - y) * 2 + 1) * sourceHeight * 32768) /
+                             height - 32768;
+        const int sy0 = static_cast<int>(fy >> 16);
+        const int wy = static_cast<int>((fy & 0xFFFF) >> 8);
         std::uint32_t* targetRow = to + static_cast<std::size_t>(dy) * static_cast<std::size_t>(width_);
         for (int dx = left; dx < right; ++dx)
         {
-            const auto sx = static_cast<std::size_t>((dx - x) * source.width()) /
-                            static_cast<std::size_t>(width);
-            const std::uint32_t pixel = from[sy * static_cast<std::size_t>(source.width()) + sx];
+            const long long fx = ((static_cast<long long>(dx - x) * 2 + 1) * sourceWidth * 32768) /
+                                 width - 32768;
+            const int sx0 = static_cast<int>(fx >> 16);
+            const int wx = static_cast<int>((fx & 0xFFFF) >> 8);
+            const std::uint32_t topColor = lerpPremultiplied(sample(sx0, sy0),
+                                                              sample(sx0 + 1, sy0), wx);
+            const std::uint32_t bottomColor = lerpPremultiplied(sample(sx0, sy0 + 1),
+                                                                 sample(sx0 + 1, sy0 + 1), wx);
+            const std::uint32_t pixel = lerpPremultiplied(topColor, bottomColor, wy);
             const std::uint32_t alpha = pixel >> 24;
             if (alpha == 255U)
             {
