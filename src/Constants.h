@@ -177,6 +177,7 @@ inline constexpr std::uint32_t TIMER_AUTO_SHOW = 15;
 inline constexpr std::uint32_t TIMER_AUTO_HIDE = 16;
 inline constexpr std::uint32_t TIMER_UPDATE = 17;
 inline constexpr std::uint32_t TIMER_ANIMATE = 18;
+inline constexpr std::uint32_t TIMER_IMAGE_FRAME = 19;
 inline constexpr std::uint32_t TIMER_AUTO_HIDE_DELAY = 300;
 inline constexpr int ANIMATION_DURATION_MS = 180;
 
@@ -263,6 +264,10 @@ inline constexpr int DISTANCE_RADIUS_MAX = 1200;
 inline constexpr double DEF_DISTANCE_MAX_SCALE = 1.8;
 inline constexpr BackgroundMode DEF_BACKGROUND_MODE = BackgroundMode::Blur;
 inline constexpr int DEF_BACKGROUND_INTENSITY = 80;
+inline constexpr int DEF_IMAGE_LAYOUT = 0;
+inline constexpr int DEF_IMAGE_OPACITY = 100;
+inline constexpr int IMAGE_OPACITY_MIN = 0;
+inline constexpr int IMAGE_OPACITY_MAX = 100;
 inline constexpr int BACKGROUND_INTENSITY_MIN = 0;
 inline constexpr int BACKGROUND_INTENSITY_MAX = 100;
 
@@ -315,6 +320,9 @@ inline constexpr std::wstring_view INI_DISTANCE_SCALING = L"distancescaling";
 inline constexpr std::wstring_view INI_DISTANCE_RADIUS = L"distanceradius";
 inline constexpr std::wstring_view INI_BACKGROUND_MODE = L"backgroundmode";
 inline constexpr std::wstring_view INI_BACKGROUND_INTENSITY = L"backgroundintensity";
+inline constexpr std::wstring_view INI_BACKGROUND_IMAGE = L"bgimage";
+inline constexpr std::wstring_view INI_IMAGE_LAYOUT = L"bglayout";
+inline constexpr std::wstring_view INI_IMAGE_OPACITY = L"bgopacity";
 
 // ---------------------------------------------------------------------------
 // Globals shared by the different panels of one process

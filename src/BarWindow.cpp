@@ -1,4 +1,4 @@
-#include "BarWindow.h"
+﻿#include "BarWindow.h"
 
 #include "ColorPicker.h"
 #include "Common.h"
@@ -190,6 +190,11 @@ BarWindow::BarWindow(const std::wstring& settingsFile)
 
     created_ = true;
     updateBlur();
+    if (panelImage_.valid() && panelImage_.frameCount() > 1)
+    {
+        SetTimer(window_, TIMER_IMAGE_FRAME,
+                 static_cast<UINT_PTR>(panelImage_.frameDelay(0)), nullptr);
+    }
     applyBackdrop(window_, backgroundMode_,
                   useBackgroundColor_ ? backgroundColor_ : systemBackgroundColor_,
                   backgroundIntensity_);
@@ -389,6 +394,19 @@ LRESULT BarWindow::handleMessage(UINT message, WPARAM wparam, LPARAM lparam) noe
         return 0;
     }
     case WM_TIMER:
+        if (wparam == TIMER_IMAGE_FRAME)
+        {
+            KillTimer(window_, TIMER_IMAGE_FRAME);
+            if (panelImage_.frameCount() > 1)
+            {
+                imageFrame_ = (imageFrame_ + 1) % panelImage_.frameCount();
+                recreateMainBitmap(bitmapPanel_.width(), bitmapPanel_.height());
+                updateWindow();
+                SetTimer(window_, TIMER_IMAGE_FRAME,
+                         static_cast<UINT_PTR>(panelImage_.frameDelay(imageFrame_)), nullptr);
+            }
+            return 0;
+        }
         if (wparam == TIMER_ANIMATE)
         {
             const DWORD elapsed = GetTickCount() - animationStart_;
@@ -728,6 +746,15 @@ void BarWindow::loadSettings()
         INI_BACKGROUND_MODE, static_cast<int>(DEF_BACKGROUND_MODE), 0, 4));
     backgroundIntensity_ = ini.readInt(INI_SECTION_MAIN, INI_BACKGROUND_INTENSITY,
         DEF_BACKGROUND_INTENSITY, BACKGROUND_INTENSITY_MIN, BACKGROUND_INTENSITY_MAX);
+    backgroundImage_ = expandPath(ini.readString(INI_SECTION_MAIN, INI_BACKGROUND_IMAGE, L""));
+    imageLayout_ = static_cast<ImageLayout>(ini.readInt(INI_SECTION_MAIN, INI_IMAGE_LAYOUT,
+        DEF_IMAGE_LAYOUT, 0, 4));
+    imageOpacity_ = ini.readInt(INI_SECTION_MAIN, INI_IMAGE_OPACITY, DEF_IMAGE_OPACITY,
+        IMAGE_OPACITY_MIN, IMAGE_OPACITY_MAX);
+    if (!backgroundImage_.empty())
+    {
+        (void)panelImage_.load(backgroundImage_);
+    }
 
     gripSize_ = GRIP_SIZE;
     hotIndex_ = ITEM_NONE;
@@ -790,6 +817,9 @@ void BarWindow::saveSettings()
     ini.writeInt(INI_SECTION_MAIN, INI_DISTANCE_RADIUS, distanceRadius_);
     ini.writeInt(INI_SECTION_MAIN, INI_BACKGROUND_MODE, static_cast<int>(backgroundMode_));
     ini.writeInt(INI_SECTION_MAIN, INI_BACKGROUND_INTENSITY, backgroundIntensity_);
+    ini.writeString(INI_SECTION_MAIN, INI_BACKGROUND_IMAGE, backgroundImage_);
+    ini.writeInt(INI_SECTION_MAIN, INI_IMAGE_LAYOUT, static_cast<int>(imageLayout_));
+    ini.writeInt(INI_SECTION_MAIN, INI_IMAGE_OPACITY, imageOpacity_);
     ini.flush();
 }
 
@@ -832,6 +862,24 @@ void BarWindow::setMonitor(int value)
         appBar_->setMonitorNum(value);
         appBar_->appBarPosChanged();
     }
+}
+
+void BarWindow::setPreviewImage(const std::wstring& path, ImageLayout layout, int opacity)
+{
+    backgroundImage_ = path;
+    imageLayout_ = layout;
+    imageOpacity_ = std::clamp(opacity, IMAGE_OPACITY_MIN, IMAGE_OPACITY_MAX);
+    imageFrame_ = 0;
+    KillTimer(window_, TIMER_IMAGE_FRAME);
+    panelImage_.clear();
+    if (!backgroundImage_.empty() && panelImage_.load(backgroundImage_) &&
+        panelImage_.frameCount() > 1)
+    {
+        SetTimer(window_, TIMER_IMAGE_FRAME,
+                 static_cast<UINT_PTR>(panelImage_.frameDelay(0)), nullptr);
+    }
+    refreshItems();
+    saveSettings();
 }
 
 void BarWindow::setPreviewColor(bool background, std::uint32_t color)
@@ -1048,6 +1096,10 @@ void BarWindow::drawBackground(DibBitmap& bitmap, const RECT& clip)
         break;
     }
     themeDrawBackground(params);
+    if (panelImage_.valid() && imageLayout_ != ImageLayout::None)
+    {
+        panelImage_.render(bitmap, clip, imageLayout_, imageOpacity_, imageFrame_);
+    }
 }
 
 void BarWindow::drawCaption(DibBitmap& bitmap, int index, bool forDrag)
@@ -1877,11 +1929,22 @@ HMENU BarWindow::buildMenu(bool extended)
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     }
 
+    if (!forItem)
+    {
+        // Empty part of the panel: keep Settings as the first, always visible item.
+        AppendMenuW(menu, MF_STRING, MC_PROPERTIES,
+                    l10n(L"Menu.Properties", L"&Settings").c_str());
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    }
     AppendMenuW(menu, MF_STRING | (lockBar_ ? MF_CHECKED : 0), MC_LOCK_BAR,
                 l10n(L"Menu.Lock", L"Lock the linkbar").c_str());
     AppendMenuW(menu, MF_STRING | (sortAlphabetically_ ? MF_CHECKED : 0), MC_SORT,
                 l10n(L"Menu.Sort", L"Sort alphabetically").c_str());
-    AppendMenuW(menu, MF_STRING, MC_PROPERTIES, l10n(L"Menu.Properties", L"&Settings").c_str());
+    if (forItem)
+    {
+        AppendMenuW(menu, MF_STRING, MC_PROPERTIES,
+                    l10n(L"Menu.Properties", L"&Settings").c_str());
+    }
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     if (extended)
     {
@@ -2872,3 +2935,4 @@ STDMETHODIMP BarWindow::Drop(IDataObject* dataObject, DWORD keyState,
 }
 
 } // namespace lb
+

@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.20)
 
-project(Linkbar VERSION 1.8.0 LANGUAGES CXX RC)
+project(Linkbar VERSION 1.9.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,6 +17,7 @@ endif()
 
 set(SOURCES
     src/main.cpp
+    src/PanelImage.cpp
     src/Constants.cpp
     src/StringUtil.cpp
     src/IniFile.cpp
@@ -40,6 +41,7 @@ set(SOURCES
 set(HEADERS
     src/Constants.h
     src/ComPtr.h
+    src/PanelImage.h
     src/ColorValue.h
     src/GdiplusCompat.h
     src/StringUtil.h
@@ -94,4 +96,5 @@ add_custom_command(TARGET linkbar POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/Locales"
         "$<TARGET_FILE_DIR:linkbar>/Locales"
 )
+
 

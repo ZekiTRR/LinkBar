@@ -49,6 +49,11 @@ enum ControlId : int
     ID_BG_MODE = 221,
     ID_BG_INTENSITY = 222,
     ID_MONITOR = 223,
+    ID_IMAGE_PATH = 224,
+    ID_IMAGE_BROWSE = 225,
+    ID_IMAGE_MODE = 226,
+    ID_IMAGE_OPACITY = 227,
+    ID_IMAGE_CLEAR = 228,
 
     ID_ICON_SIZE = 230,
     ID_MARGIN_H = 231,
@@ -343,6 +348,47 @@ std::optional<Color> editHex(HWND edit, Color fallback)
     return value ? value : std::optional<Color>(fallback);
 }
 
+std::wstring editText(HWND control)
+{
+    wchar_t buffer[MAX_PATH * 2]{};
+    GetWindowTextW(control, buffer, static_cast<int>(std::size(buffer)));
+    return buffer;
+}
+
+bool pickImageFile(HWND owner, std::wstring& path)
+{
+    ComPtr<IFileDialog> dialog;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(dialog.address()))))
+    {
+        return false;
+    }
+    dialog->SetTitle(L"Select background image");
+    constexpr COMDLG_FILTERSPEC filters[] = {
+        {L"Images", L"*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.ico"},
+        {L"All files", L"*.*"},
+    };
+    dialog->SetFileTypes(static_cast<UINT>(std::size(filters)), filters);
+    dialog->SetOptions(FOS_PATHMUSTEXIST | FOS_FILEMUSTEXIST);
+    if (FAILED(dialog->Show(owner)))
+    {
+        return false;
+    }
+    ComPtr<IShellItem> item;
+    if (FAILED(dialog->GetResult(item.address())))
+    {
+        return false;
+    }
+    PWSTR result = nullptr;
+    if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &result)))
+    {
+        return false;
+    }
+    path = result;
+    CoTaskMemFree(result);
+    return true;
+}
+
 // Only hex digits may be typed into a color field; pasted text is sanitized
 // in WM_COMMAND/EN_CHANGE below.
 LRESULT CALLBACK hexEditProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) noexcept
@@ -634,6 +680,42 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM wparam, LPARAM l
                 PostMessageW(window, LM_PICK_COLOR, static_cast<WPARAM>(id), 0);
                 return 0;
             }
+            if (id == ID_IMAGE_BROWSE)
+            {
+                std::wstring path;
+                if (pickImageFile(window, path))
+                {
+                    SetWindowTextW(state->control(ID_IMAGE_PATH), path.c_str());
+                    const ImageLayout layout =
+                        static_cast<ImageLayout>(comboIndex(state->control(ID_IMAGE_MODE), 0, 4));
+                    const int opacity = spinValue(state->control(ID_IMAGE_OPACITY),
+                        DEF_IMAGE_OPACITY, IMAGE_OPACITY_MIN, IMAGE_OPACITY_MAX);
+                    state->bar->setPreviewImage(path, layout, opacity);
+                    EnableWindow(state->control(ID_APPLY), TRUE);
+                }
+                return 0;
+            }
+            if (id == ID_IMAGE_CLEAR)
+            {
+                SetWindowTextW(state->control(ID_IMAGE_PATH), L"");
+                state->bar->setPreviewImage(L"", ImageLayout::None, DEF_IMAGE_OPACITY);
+                EnableWindow(state->control(ID_APPLY), TRUE);
+                return 0;
+            }
+            if (id == ID_IMAGE_MODE || id == ID_IMAGE_OPACITY)
+            {
+                const std::wstring path = editText(state->control(ID_IMAGE_PATH));
+                if (!path.empty())
+                {
+                    const ImageLayout layout =
+                        static_cast<ImageLayout>(comboIndex(state->control(ID_IMAGE_MODE), 0, 4));
+                    const int opacity = spinValue(state->control(ID_IMAGE_OPACITY),
+                        DEF_IMAGE_OPACITY, IMAGE_OPACITY_MIN, IMAGE_OPACITY_MAX);
+                    state->bar->setPreviewImage(path, layout, opacity);
+                }
+                EnableWindow(state->control(ID_APPLY), TRUE);
+                return 0;
+            }
             if (state->canChange)
             {
                 if (id == ID_BG_EDIT)
@@ -719,6 +801,9 @@ void SettingsState::load()
     setChecked(control(ID_ANIMATIONS), b.animationsEnabled_);
     setChecked(control(ID_DISTANCE_SCALING), b.distanceScaling_);
     setSpin(control(ID_DISTANCE_RADIUS), b.distanceRadius_);
+    SetWindowTextW(control(ID_IMAGE_PATH), b.backgroundImage_.c_str());
+    setCombo(control(ID_IMAGE_MODE), static_cast<int>(b.imageLayout_));
+    setSpin(control(ID_IMAGE_OPACITY), b.imageOpacity_);
 
     ShowWindow(control(ID_LIGHT_STYLE), os().isSeven ? SW_SHOW : SW_HIDE);
     ShowWindow(control(ID_AERO_GLASS), os().isEightAndEightPointOne ? SW_SHOW : SW_HIDE);
@@ -779,6 +864,10 @@ void SettingsState::apply()
     b.distanceRadius_ = spinValue(control(ID_DISTANCE_RADIUS), DEF_DISTANCE_RADIUS,
                                   DISTANCE_RADIUS_MIN, DISTANCE_RADIUS_MAX);
     b.setMonitor(comboIndex(control(ID_MONITOR), 0, monitorCount() - 1));
+    b.setPreviewImage(editText(control(ID_IMAGE_PATH)),
+                      static_cast<ImageLayout>(comboIndex(control(ID_IMAGE_MODE), 0, 4)),
+                      spinValue(control(ID_IMAGE_OPACITY), DEF_IMAGE_OPACITY,
+                                IMAGE_OPACITY_MIN, IMAGE_OPACITY_MAX));
 
     b.setAlign(b.align_);
     b.setAutoHide(isChecked(control(ID_AUTO_HIDE)));
@@ -934,6 +1023,29 @@ void buildPanelPage(SettingsState& state, HWND page)
              box(x, 13 + 10 * rowHeight, labelWidth, 20));
     state.store(ID_MONITOR, addCombo(layout, page, controlX, 10 + 10 * rowHeight,
                                      controlWidth, monitors, ID_MONITOR));
+
+    addLabel(layout, page, l10n(L"Properties.BackgroundImage", L"Image:"),
+             box(x, 13 + 11 * rowHeight, labelWidth, 20));
+    state.store(ID_IMAGE_PATH, layout.add(page, L"Edit", nullptr,
+        WS_BORDER | WS_TABSTOP | ES_READONLY, box(controlX, 10 + 11 * rowHeight, 130, 22),
+        ID_IMAGE_PATH));
+    state.store(ID_IMAGE_BROWSE, layout.add(page, L"Button", L"...", WS_TABSTOP,
+        box(controlX + 134, 10 + 11 * rowHeight, 22, 22), ID_IMAGE_BROWSE));
+    state.store(ID_IMAGE_CLEAR, layout.add(page, L"Button", L"X", WS_TABSTOP,
+        box(controlX + 158, 10 + 11 * rowHeight, 22, 22), ID_IMAGE_CLEAR));
+
+    addLabel(layout, page, l10n(L"Properties.ImageLayout", L"Image fit:"),
+             box(x, 13 + 12 * rowHeight, labelWidth, 20));
+    state.store(ID_IMAGE_MODE, addCombo(layout, page, controlX, 10 + 12 * rowHeight,
+        controlWidth,
+        {l10n(L"Properties.ImageNone", L"None"), l10n(L"Properties.ImageStretch", L"Stretch"),
+         l10n(L"Properties.ImageFit", L"Fit"), l10n(L"Properties.ImageTile", L"Tile"),
+         l10n(L"Properties.ImageCenter", L"Center")}, ID_IMAGE_MODE));
+    addLabel(layout, page, l10n(L"Properties.ImageOpacity", L"Opacity:"),
+             box(x, 13 + 13 * rowHeight, labelWidth, 20));
+    state.store(ID_IMAGE_OPACITY, addSpin(layout, page,
+        box(controlX, 10 + 13 * rowHeight, controlWidth, 22),
+        IMAGE_OPACITY_MIN, IMAGE_OPACITY_MAX, ID_IMAGE_OPACITY));
 }
 
 void buildItemsPage(SettingsState& state, HWND page)

@@ -10,6 +10,7 @@
 #include "DirectoryWatch.h"
 #include "Hint.h"
 #include "Items.h"
+#include "PanelImage.h"
 
 #include <oleidl.h>
 #include <memory>
@@ -120,6 +121,7 @@ public:
     void setSortAlphabetically(bool value);
     void setMonitor(int value);
     void setPreviewColor(bool background, std::uint32_t color);
+    void setPreviewImage(const std::wstring& path, ImageLayout layout, int opacity);
     bool updateDistanceScales(int x, int y);
     void startAnimation(bool toHidden);
 
@@ -229,6 +231,11 @@ public:
     int distanceRadius_ = DEF_DISTANCE_RADIUS;
     BackgroundMode backgroundMode_ = DEF_BACKGROUND_MODE;
     int backgroundIntensity_ = DEF_BACKGROUND_INTENSITY;
+    std::wstring backgroundImage_;
+    ImageLayout imageLayout_ = ImageLayout::None;
+    int imageOpacity_ = DEF_IMAGE_OPACITY;
+    PanelImage panelImage_;
+    int imageFrame_ = 0;
     bool animating_ = false;
     bool animationToHidden_ = false;
     DWORD animationStart_ = 0;
