@@ -1089,7 +1089,9 @@ void BarWindow::drawBackground(DibBitmap& bitmap, const RECT& clip)
         params.panelAlpha = backgroundIntensity_ * 255 / 100;
         break;
     case BackgroundMode::Transparent:
-        params.panelAlpha = 0;
+        // Alpha 0 makes a layered window click-through: right-click and item
+        // input would stop working. Alpha 1 is invisible but keeps hit testing.
+        params.panelAlpha = 1;
         break;
     default:
         params.panelAlpha = 1;
