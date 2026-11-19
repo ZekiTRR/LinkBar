@@ -1437,6 +1437,7 @@ void BarWindow::deleteItem(int index)
     items_.erase(static_cast<std::size_t>(index));
     if (hotIndex_ == index) hotIndex_ = ITEM_NONE;
     if (pressedIndex_ == index) pressedIndex_ = ITEM_NONE;
+    saveLinks();
 }
 
 void BarWindow::executeItem(int index)
@@ -2143,6 +2144,7 @@ void BarWindow::newSeparator()
     {
         items_.add(std::move(item));
     }
+    saveLinks();
     updateWindowSize();
 }
 
@@ -2589,6 +2591,7 @@ void BarWindow::setSortAlphabetically(bool value)
     if (value)
     {
         items_.sort();
+        saveLinks();
         recreateMainBitmap(bitmapPanel_.width(), bitmapPanel_.height());
         updateWindow();
     }
@@ -2788,6 +2791,7 @@ void BarWindow::dirWatchChange(WatchAction action, const std::wstring& name)
         item->needLoad = true;
         if (itemDropPosition_ == ITEM_NONE) items_.add(std::move(item));
         else items_.insert(static_cast<std::size_t>(itemDropPosition_), std::move(item));
+        saveLinks();
         break;
     }
     case WatchAction::Removed:
@@ -2819,6 +2823,7 @@ void BarWindow::dirWatchChange(WatchAction action, const std::wstring& name)
             item->fileName = workDir_ + name;
             item->needLoad = true;
             renamedOldHash_ = 0;
+            saveLinks();
         }
         break;
     }
@@ -2967,6 +2972,7 @@ STDMETHODIMP BarWindow::Drop(IDataObject* dataObject, DWORD keyState,
             items_.move(static_cast<std::size_t>(dragIndex_), static_cast<std::size_t>(target));
         }
         setDropPosition(POINT{-1, -1});
+        saveLinks();
         updateWindowSize();
         if (effect != nullptr)
         {
