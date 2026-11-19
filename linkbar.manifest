@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity
-	version="1.9.1.0"
+	version="1.9.2.0"
     type="win32"
     name="aserteam.linkbar"
     processorArchitecture="*"
@@ -51,6 +51,7 @@
   </trustInfo>
         
 </assembly>
+
 
 
 
